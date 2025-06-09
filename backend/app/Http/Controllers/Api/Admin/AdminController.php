@@ -16,8 +16,12 @@ class AdminController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // hna jib all admins, and les permissions ta3hom
-        $admins = Admin::with('permissions')->get();
+        // Get all admins with their permissions as names array
+        $admins = Admin::with('permissions')->get()->map(function ($admin) {
+            $adminArray = $admin->toArray();
+            $adminArray['permissions'] = $admin->permissions->pluck('name');
+            return $adminArray;
+        });
 
         return response()->json([
             'admins' => $admins
@@ -35,7 +39,7 @@ class AdminController extends Controller
             'email' => 'required|email|unique:admins,email',
             'password' => 'required|string|min:6',
             'permissions' => 'required|array',
-            'permissions.*' => 'exists:permissions,id'
+            'permissions.*' => 'exists:permissions,name'
         ]);
 
         $admin = Admin::create([
@@ -45,12 +49,16 @@ class AdminController extends Controller
             'is_blocked' => false
         ]);
 
-        $admin->permissions()->attach($request->permissions);
+        // Sync permissions by names
+        $permissionIds = Permission::whereIn('name', $request->permissions)->pluck('id');
+        $admin->permissions()->attach($permissionIds);
         $admin->load('permissions');
 
         return response()->json([
             'message' => 'Admin created successfully',
-            'admin' => $admin
+            'admin' => array_merge($admin->toArray(), [
+                'permissions' => $admin->permissions->pluck('name')
+            ])
         ], 201);
     }
 
@@ -63,7 +71,9 @@ class AdminController extends Controller
         $admin->load('permissions');
 
         return response()->json([
-            'admin' => $admin
+            'admin' => array_merge($admin->toArray(), [
+                'permissions' => $admin->permissions->pluck('name')
+            ])
         ]);
     }
 
@@ -78,7 +88,7 @@ class AdminController extends Controller
             'email' => 'sometimes|required|email|unique:admins,email,' . $admin->id,
             'password' => 'sometimes|required|string|min:6',
             'permissions' => 'sometimes|required|array',
-            'permissions.*' => 'exists:permissions,id'
+            'permissions.*' => 'exists:permissions,name'
         ]);
 
         $updateData = $request->only(['name', 'email']);
@@ -90,14 +100,18 @@ class AdminController extends Controller
         $admin->update($updateData);
 
         if ($request->has('permissions')) {
-            $admin->permissions()->sync($request->permissions);
+            // Sync permissions by names
+            $permissionIds = Permission::whereIn('name', $request->permissions)->pluck('id');
+            $admin->permissions()->sync($permissionIds);
         }
 
         $admin->load('permissions');
 
         return response()->json([
             'message' => 'Admin updated successfully',
-            'admin' => $admin
+            'admin' => array_merge($admin->toArray(), [
+                'permissions' => $admin->permissions->pluck('name')
+            ])
         ]);
     }
 
@@ -140,6 +154,26 @@ class AdminController extends Controller
 
         return response()->json([
             'permissions' => $permissions
+        ]);
+    }
+
+    public function destroy(Request $request, Admin $admin)
+    {
+        if (!$request->user()->hasPermission('super_admin')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Prevent deleting yourself
+        if ($admin->id === $request->user()->id) {
+            return response()->json([
+                'message' => 'You cannot delete your own account'
+            ], 400);
+        }
+
+        $admin->delete();
+
+        return response()->json([
+            'message' => 'Admin deleted successfully'
         ]);
     }
 }

@@ -10,7 +10,7 @@ class ServiceController extends Controller
 {
     public function index()
     {
-        $services = Service::active()->get();
+        $services = Service::all();
 
         return response()->json([
             'services' => $services

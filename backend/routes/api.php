@@ -48,6 +48,7 @@ Route::prefix('admin')->group(function () {
             Route::get('/{service}', [AdminServiceController::class, 'show']);
             Route::put('/{service}', [AdminServiceController::class, 'update']);
             Route::delete('/{service}', [AdminServiceController::class, 'destroy']);
+            Route::put('/{service}/toggle-status', [AdminServiceController::class, 'toggleStatus']);
         });
 
         // Admin management
@@ -58,6 +59,7 @@ Route::prefix('admin')->group(function () {
             Route::put('/{admin}', [AdminController::class, 'update']);
             Route::put('/{admin}/block', [AdminController::class, 'block']);
             Route::put('/{admin}/unblock', [AdminController::class, 'unblock']);
+            Route::delete('/{admin}', [AdminController::class, 'destroy']);
         });
 
         Route::get('/permissions', [AdminController::class, 'permissions']);

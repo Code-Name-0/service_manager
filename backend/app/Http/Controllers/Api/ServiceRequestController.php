@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\ServiceRequest;
+use App\Events\NewServiceRequestSubmitted;
 use Illuminate\Http\Request;
 
 class ServiceRequestController extends Controller
@@ -28,8 +29,11 @@ class ServiceRequestController extends Controller
         ]);
 
         // to reduce queries from the front end
-        // comment it ila database storage is prority
+        // comment it ila memory is prority
         $serviceRequest->load('service');
+
+        // broadcast event for real-time notifications
+        broadcast(new NewServiceRequestSubmitted($serviceRequest));
 
         return response()->json([
             'message' => 'Service request submitted successfully!',

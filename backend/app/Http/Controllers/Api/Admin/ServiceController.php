@@ -97,4 +97,22 @@ class ServiceController extends Controller
             'message' => 'Service deleted successfully'
         ]);
     }
+
+    public function toggleStatus(Request $request, Service $service)
+    {
+        if (!$request->user()->hasPermission('manage_services')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $service->update([
+            'is_active' => !$service->is_active
+        ]);
+
+        $status = $service->is_active ? 'activated' : 'deactivated';
+
+        return response()->json([
+            'message' => "Service {$status} successfully",
+            'service' => $service
+        ]);
+    }
 }

@@ -18,9 +18,9 @@ Broadcast::channel('service-requests', function () {
     return true; // Public channel
 });
 
-// Private channel for admin notifications
-Broadcast::channel('admin-notifications', function ($admin) {
-    return $admin !== null; 
+// Public channel for admin notifications (we'll filter on frontend)
+Broadcast::channel('admin-notifications', function () {
+    return true; // Public channel - filtering will be done on frontend
 });
 
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
