@@ -1,18 +1,20 @@
 
 # service_manager
+
+# in backend folder
 ## run backend:
 ```bash
 php artisan serve
 ```
 
-### run queue worker
+## run queue worker
 ```bash
 php artisan queue:work
 ```
 
 
-
-## vutify installation 
+# in frontend folder
+## run npm server
 ```bash
-npm install vuetify@^3.4.0 @mdi/font
+npm run serve
 ```
