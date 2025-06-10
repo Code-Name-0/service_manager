@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceRequest;
 use App\Events\NewServiceRequestSubmitted;
+use App\Http\Resources\ServiceRequestResource;
 use Illuminate\Http\Request;
 
 class ServiceRequestController extends Controller
@@ -28,8 +29,7 @@ class ServiceRequestController extends Controller
             'status' => 'pending'
         ]);
 
-        // to reduce queries from the front end
-        // comment it ila memory is prority
+
         $serviceRequest->load('service');
 
         // broadcast event for real-time notifications
@@ -37,7 +37,7 @@ class ServiceRequestController extends Controller
 
         return response()->json([
             'message' => 'Service request submitted successfully!',
-            'service_request' => $serviceRequest
+            'service_request' => new ServiceRequestResource($serviceRequest)
         ], 201);
     }
 }

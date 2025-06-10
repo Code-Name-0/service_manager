@@ -20,23 +20,28 @@ use App\Http\Controllers\Api\Admin\AdminController;
 |
 */
 
-// Public routes
+
 Route::get('/services', [ServiceController::class, 'index']);
+
 Route::post('/service-requests', [ServiceRequestController::class, 'store']);
 
-// Admin authentication routes
+
 Route::prefix('admin')->group(function () {
+
     Route::post('/login', [AuthController::class, 'login']);
 
-    // Protected admin routes
+
     Route::middleware('auth:admin')->group(function () {
+
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
 
-        // Service requests management
+
         Route::prefix('service-requests')->group(function () {
+
             Route::get('/', [AdminServiceRequestController::class, 'index']);
             Route::put('/{serviceRequest}/approve', [AdminServiceRequestController::class, 'approve']);
+
             Route::put('/{serviceRequest}/deny', [AdminServiceRequestController::class, 'deny']);
             Route::put('/{serviceRequest}/complete', [AdminServiceRequestController::class, 'complete']);
         });
@@ -60,6 +65,13 @@ Route::prefix('admin')->group(function () {
             Route::put('/{admin}/block', [AdminController::class, 'block']);
             Route::put('/{admin}/unblock', [AdminController::class, 'unblock']);
             Route::delete('/{admin}', [AdminController::class, 'destroy']);
+        });
+
+        // Stats routes for dashboards
+        Route::prefix('stats')->group(function () {
+            Route::get('/service-requests', [AdminServiceRequestController::class, 'getStats']);
+            Route::get('/services', [AdminServiceController::class, 'getStats']);
+            Route::get('/admins', [AdminController::class, 'getStats']);
         });
 
         Route::get('/permissions', [AdminController::class, 'permissions']);

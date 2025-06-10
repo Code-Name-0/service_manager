@@ -7,26 +7,37 @@ use Illuminate\Database\Eloquent\Model;
 
 class ServiceRequest extends Model
 {
+
     use HasFactory;
 
+
     protected $fillable = [
+
         'service_id',
         'client_name',
+
         'client_email',
         'client_phone',
+
         'message',
         'status',
+
         'admin_response',
         'admin_id',
+
     ];
+
 
     public function service()
     {
+
         return $this->belongsTo(Service::class);
     }
 
+
     public function admin()
     {
+
         return $this->belongsTo(Admin::class);
     }
 

@@ -8,6 +8,9 @@ use App\Models\Permission;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
+use App\Http\Resources\AdminResource;
+use App\Http\Resources\AdminCollection;
+
 class AdminController extends Controller
 {
     public function index(Request $request)
@@ -16,16 +19,46 @@ class AdminController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        // Get all admins with their permissions as names array
-        $admins = Admin::with('permissions')->get()->map(function ($admin) {
-            $adminArray = $admin->toArray();
-            $adminArray['permissions'] = $admin->permissions->pluck('name');
-            return $adminArray;
-        });
+        $query = Admin::with('permissions');
 
-        return response()->json([
-            'admins' => $admins
-        ]);
+
+        if ($request->has('search') && !empty($request->search)) {
+
+            $searchTerm = '%' . $request->search . '%';
+
+            $query->where(function ($q) use ($searchTerm) {
+
+                $q->where('name', 'like', $searchTerm)
+                    ->orWhere('email', 'like', $searchTerm);
+            });
+        }
+
+
+        if ($request->has('sort_by') && !empty($request->sort_by)) {
+
+            $sortBy = $request->sort_by;
+
+            $sortOrder = $request->get('sort_order', 'asc');
+
+
+            $allowedSortColumns = ['name', 'email', 'created_at', 'updated_at', 'is_blocked'];
+
+
+
+            if (in_array($sortBy, $allowedSortColumns)) {
+
+                $query->orderBy($sortBy, $sortOrder);
+            }
+        } else {
+            $query->orderBy('created_at', 'desc');
+        }
+
+
+        $perPage = max(1, min($request->get('per_page', 10), 100));
+
+        $admins = $query->paginate($perPage);
+
+        return new AdminCollection($admins);
     }
 
     public function store(Request $request)
@@ -36,9 +69,11 @@ class AdminController extends Controller
 
         $request->validate([
             'name' => 'required|string|max:255',
+
             'email' => 'required|email|unique:admins,email',
             'password' => 'required|string|min:6',
             'permissions' => 'required|array',
+
             'permissions.*' => 'exists:permissions,name'
         ]);
 
@@ -49,16 +84,13 @@ class AdminController extends Controller
             'is_blocked' => false
         ]);
 
-        // Sync permissions by names
         $permissionIds = Permission::whereIn('name', $request->permissions)->pluck('id');
         $admin->permissions()->attach($permissionIds);
         $admin->load('permissions');
 
         return response()->json([
             'message' => 'Admin created successfully',
-            'admin' => array_merge($admin->toArray(), [
-                'permissions' => $admin->permissions->pluck('name')
-            ])
+            'admin' => new AdminResource($admin)
         ], 201);
     }
 
@@ -71,9 +103,7 @@ class AdminController extends Controller
         $admin->load('permissions');
 
         return response()->json([
-            'admin' => array_merge($admin->toArray(), [
-                'permissions' => $admin->permissions->pluck('name')
-            ])
+            'admin' => new AdminResource($admin)
         ]);
     }
 
@@ -100,7 +130,6 @@ class AdminController extends Controller
         $admin->update($updateData);
 
         if ($request->has('permissions')) {
-            // Sync permissions by names
             $permissionIds = Permission::whereIn('name', $request->permissions)->pluck('id');
             $admin->permissions()->sync($permissionIds);
         }
@@ -109,9 +138,7 @@ class AdminController extends Controller
 
         return response()->json([
             'message' => 'Admin updated successfully',
-            'admin' => array_merge($admin->toArray(), [
-                'permissions' => $admin->permissions->pluck('name')
-            ])
+            'admin' => new AdminResource($admin)
         ]);
     }
 
@@ -175,5 +202,24 @@ class AdminController extends Controller
         return response()->json([
             'message' => 'Admin deleted successfully'
         ]);
+    }
+
+    public function getStats(Request $request)
+    {
+        if (!$request->user()->hasPermission('super_admin')) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $stats = [
+            'total_admins' => Admin::count(),
+            'active_admins' => Admin::where('is_blocked', false)->count(),
+            'blocked_admins' => Admin::where('is_blocked', true)->count(),
+            'super_admins' => Admin::whereHas('permissions', function ($query) {
+                $query->where('name', 'super_admin');
+            })->count(),
+            'total_permissions' => Permission::count(),
+        ];
+
+        return response()->json($stats);
     }
 }
