@@ -15,7 +15,6 @@ export default {
   },
   
   mounted() {
-    // Initialize authentication when app starts
     const authStore = useAuthStore()
     authStore.initializeAuth()
   }

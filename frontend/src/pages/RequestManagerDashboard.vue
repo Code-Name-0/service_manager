@@ -9,48 +9,40 @@
         
         <v-row class="mb-6">
           <v-col cols="12" md="3">
-            <v-card elevation="2" rounded="lg" class="pa-4">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-email" size="40" color="primary" class="mr-3"></v-icon>
-                <div>
-                  <p class="text-caption text-medium-emphasis mb-1">Total Requests</p>
-                  <h3 class="text-h4 font-weight-bold">{{ stats.totalRequests }}</h3>
-                </div>
-              </div>
-            </v-card>
+            <StatCard 
+              title="Total Requests"
+              :value="stats.totalRequests"
+              icon="mdi-email"
+              icon-color="primary"
+              value-color="text-primary"
+            />
           </v-col>
           <v-col cols="12" md="3">
-            <v-card elevation="2" rounded="lg" class="pa-4">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-clock-outline" size="40" color="warning" class="mr-3"></v-icon>
-                <div>
-                  <p class="text-caption text-medium-emphasis mb-1">Pending</p>
-                  <h3 class="text-h4 font-weight-bold">{{ stats.pendingRequests }}</h3>
-                </div>
-              </div>
-            </v-card>
+            <StatCard 
+              title="Pending"
+              :value="stats.pendingRequests"
+              icon="mdi-clock-outline"
+              icon-color="warning"
+              value-color="text-warning"
+            />
           </v-col>
           <v-col cols="12" md="3">
-            <v-card elevation="2" rounded="lg" class="pa-4">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-check-circle" size="40" color="success" class="mr-3"></v-icon>
-                <div>
-                  <p class="text-caption text-medium-emphasis mb-1">Approved</p>
-                  <h3 class="text-h4 font-weight-bold">{{ stats.approvedRequests }}</h3>
-                </div>
-              </div>
-            </v-card>
+            <StatCard 
+              title="Approved"
+              :value="stats.approvedRequests"
+              icon="mdi-check-circle"
+              icon-color="success"
+              value-color="text-success"
+            />
           </v-col>
           <v-col cols="12" md="3">
-            <v-card elevation="2" rounded="lg" class="pa-4">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-check-all" size="40" color="info" class="mr-3"></v-icon>
-                <div>
-                  <p class="text-caption text-medium-emphasis mb-1">Completed</p>
-                  <h3 class="text-h4 font-weight-bold">{{ stats.completedRequests }}</h3>
-                </div>
-              </div>
-            </v-card>
+            <StatCard 
+              title="Completed"
+              :value="stats.completedRequests"
+              icon="mdi-check-all"
+              icon-color="info"
+              value-color="text-info"
+            />
           </v-col>
         </v-row>
 
@@ -102,10 +94,14 @@
             class="mb-4"
           ></v-text-field>
 
-          <v-data-table
+          <v-data-table-server
             :headers="headers"
-            :items="filteredRequests"
+            :items="requests"
             :loading="loading"
+            :items-length="totalItems"
+            :items-per-page="itemsPerPage"
+            :items-per-page-options="[10, 25, 50, 100]"
+            @update:options="loadItems"
             class="elevation-10"
             item-value="id"
           >
@@ -182,7 +178,7 @@
                 <v-icon>mdi-eye</v-icon>
               </v-btn>
             </template>
-          </v-data-table>
+          </v-data-table-server>
         </v-card>
       </v-container>
     </div>
@@ -375,21 +371,39 @@
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
+import StatCard from '@/components/common/StatCard.vue'
+
+import { watchDebounced } from '@vueuse/core'
+
 
 export default {
+
   name: 'RequestManagerDashboard',
 
+  components: {
+    StatCard
+  },
+
+
   setup() {
+
     const authStore = useAuthStore()
     const notificationsStore = useNotificationsStore()
+
     return { authStore, notificationsStore }
   },
 
+
   data() {
+
     return {
+
       loading: false,
       submitting: false,
       requests: [],
+      totalItems: 0,
+      paginationMeta: null,
+      currentPage: 1,
       stats: {
         totalRequests: 0,
         pendingRequests: 0,
@@ -401,13 +415,15 @@ export default {
       adminResponse: '',
       statusFilter: 'all',
       headers: [
-        { title: 'Client', key: 'client_name', sortable: true },
+        { title: 'Client', key: 'client_name', sortable: false },
         { title: 'Service', key: 'service', sortable: false },
         { title: 'Status', key: 'status', sortable: true },
         { title: 'Creation Date', key: 'created_at', sortable: true },
         { title: 'Actions', key: 'actions', sortable: false, width: '200px' }
       ],
       search: '',
+
+      itemsPerPage: 10,
       snackbar: {
         show: false,
         message: '',
@@ -419,34 +435,15 @@ export default {
         message: ''
       },
       currentNotification: null
-    }
-  },
-
-  computed: {
-    filteredRequests() {
-      let filtered = this.requests
-
-      if (this.statusFilter !== 'all') {
-        filtered = filtered.filter(request => request.status === this.statusFilter)
-      }
-
-      if (this.search) {
-        filtered = filtered.filter(request =>
-          request.client_name.toLowerCase().includes(this.search.toLowerCase()) ||
-          request.client_email.toLowerCase().includes(this.search.toLowerCase()) ||
-          request.service?.name.toLowerCase().includes(this.search.toLowerCase()) ||
-          request.message.toLowerCase().includes(this.search.toLowerCase())
-        )
-      }
-
-      return filtered
-    }
-  },
+    }  },
 
   async mounted() {
-    await this.fetchRequests()
-    
+    await this.loadItems()
 
+    await this.fetchStats()
+    
+    watchDebounced(() => this.search, () => this.loadItems(), { debounce: 1000 })
+    watchDebounced(() => this.statusFilter, () => this.loadItems(), { debounce: 100 })
 
     this.notificationsStore.initialize()
     this.setupNotificationListener()
@@ -481,25 +478,61 @@ export default {
         this.currentNotification = null
       }
     },
-    async fetchRequests() {
+     
+    async fetchStats() {
+      try {
+        const response = await axios.get(`${this.$backend.baseApiUrl}/stats/service-requests`)
+        this.stats = {
+          totalRequests: response.data.total_requests,
+          pendingRequests: response.data.pending_requests,
+          approvedRequests: response.data.approved_requests,
+          completedRequests: response.data.completed_requests
+        }
+      } catch (error) {
+        console.error('Error fetching stats:', error)
+      }
+    },
+    
+    async loadItems(options = {}) {
       this.loading = true
       try {
-        const response = await axios.get(`${this.$backend.baseApiUrl}/service-requests`)
-        this.requests = response.data.service_requests || []
-        this.updateStats()
+        const { page = 1, itemsPerPage = this.itemsPerPage, sortBy = [], search } = options
+        
+        if (itemsPerPage !== this.itemsPerPage) {
+
+          this.itemsPerPage = itemsPerPage
+        }
+        
+        const perPageValue = itemsPerPage === -1 ? 100 : itemsPerPage
+
+        
+        const params = {
+          page,
+          per_page: perPageValue,
+          search: this.search || search || '',
+          status: this.statusFilter !== 'all' ? this.statusFilter : ''
+        }
+
+        if (sortBy.length > 0) {
+          params.sort_by = sortBy[0].key
+
+          params.sort_order = sortBy[0].order
+        }
+
+        const response = await axios.get(`${this.$backend.baseApiUrl}/service-requests`, { params })
+        console.log('url:', `${this.$backend.baseApiUrl}/service-requests`)
+        console.log('Params:', params)
+        console.log('Response data:', response)
+        this.requests = response.data.data || []
+        this.totalItems = response.data.meta?.total || 0
+
+        this.paginationMeta = response.data.meta || null
       } catch (error) {
-        console.error('Error fetching service requests:', error)
-        this.showSnackbar('Error fetching service requests', 'error')
+        console.error('Error loading service requests:', error)
+        this.showSnackbar('Error loading service requests', 'error')
       } finally {
         this.loading = false
       }
-    },
-
-    updateStats() {
-      this.stats.totalRequests = this.requests.length
-      this.stats.pendingRequests = this.requests.filter(r => r.status === 'pending').length
-      this.stats.approvedRequests = this.requests.filter(r => r.status === 'approved').length
-      this.stats.completedRequests = this.requests.filter(r => r.status === 'completed').length
     },
 
     viewRequest(request) {
@@ -532,11 +565,13 @@ export default {
         
         const index = this.requests.findIndex(r => r.id === request.id)
         if (index !== -1) {
-          this.requests[index] = response.data.service_request
+          this.requests[index] = response.data.data || response.data.service_request
+
         }
         
-        this.updateStats()
+        await this.fetchStats()
         this.showSnackbar(response.data.message)
+        await this.loadItems() 
       } catch (error) {
         console.error(`Error updating request status to ${action}:`, error)
         this.showSnackbar(
@@ -550,9 +585,11 @@ export default {
       if (!this.selectedRequest) return
 
       this.submitting = true
+
       try {
         const response = await axios.put(
           `${this.$backend.baseApiUrl}/service-requests/${this.selectedRequest.id}/${action}`,
+
           {
             admin_response: this.adminResponse
           }
@@ -560,12 +597,14 @@ export default {
         
         const index = this.requests.findIndex(r => r.id === this.selectedRequest.id)
         if (index !== -1) {
-          this.requests[index] = response.data.service_request
+          this.requests[index] = response.data.data || response.data.service_request
         }
+
         
-        this.updateStats()
+        await this.fetchStats()
         this.showSnackbar(response.data.message)
         this.closeRequestDialog()
+        await this.loadItems() 
       } catch (error) {
         console.error(`Error updating request status to ${action}:`, error)
         this.showSnackbar(

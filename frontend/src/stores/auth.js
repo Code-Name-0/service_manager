@@ -36,23 +36,27 @@ export const useAuthStore = defineStore('auth', {
   },
 
   actions: {
-    // Initialize auth state (check if admin is logged in)
     async initializeAuth() {
+
+
       if (this.token) {
         try {
-          // Set the token in axios headers
           axios.defaults.headers.common['Authorization'] = `Bearer ${this.token}`
           await this.fetchAdmin()
+
+
         } catch (error) {
           console.error('Token validation failed:', error)
           this.logout()
         }
       }
+
     },
 
-    // Admin login action
     async login(credentials) {
+
       this.loading = true
+
       this.error = null
       
       try {
@@ -86,36 +90,37 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    // Logout action
     async logout() {
+
       if (this.token) {
         try {
-          // Call logout endpoint to invalidate token on server
+
           await axios.post(`${API_BASE_ADMIN}/logout`)
         } catch (error) {
+
           console.error('Logout error:', error)
-          // Continue with local logout even if server call fails
         }
       }
 
-      // Clear local state
+
       this.admin = null
       this.token = null
       this.isAuthenticated = false
       this.error = null
       
-      // Clear from localStorage
+
       localStorage.removeItem('admin_token')
       
-      // Remove Authorization header
+
       delete axios.defaults.headers.common['Authorization']
     },
 
-    // Fetch current admin data
+
     async fetchAdmin() {
       try {
         const response = await axios.get(`${API_BASE_ADMIN}/me`)
-        this.admin = response.data.admin
+        // With Laravel Resources, admin data might be in response.data.data or response.data.admin
+        this.admin = response.data.data || response.data.admin
         this.isAuthenticated = true
         
         // Update admin permissions in state
@@ -131,13 +136,16 @@ export const useAuthStore = defineStore('auth', {
       }
     },
 
-    // Get admin permissions
+
     async fetchPermissions() {
+
       try {
         const response = await axios.get(`${API_BASE_ADMIN}/permissions`)
+
         return response.data
       } catch (error) {
         console.error('Fetch permissions error:', error)
+
         throw error
       }
     }

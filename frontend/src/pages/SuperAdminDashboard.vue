@@ -11,48 +11,40 @@
 
         <v-row class="mb-6">
           <v-col cols="12" md="3">
-            <v-card elevation="2" rounded="lg" class="pa-4">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-account-multiple" size="40" color="primary" class="mr-3"></v-icon>
-                <div>
-                  <p class="text-caption text-medium-emphasis mb-1">Total Admins</p>
-                  <h3 class="text-h4 font-weight-bold">{{ stats.totalAdmins }}</h3>
-                </div>
-              </div>
-            </v-card>
+            <StatCard 
+              title="Total Admins"
+              :value="stats.totalAdmins"
+              icon="mdi-account-multiple"
+              icon-color="primary"
+              value-color="text-primary"
+            />
           </v-col>
           <v-col cols="12" md="3">
-            <v-card elevation="2" rounded="lg" class="pa-4">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-account-check" size="40" color="success" class="mr-3"></v-icon>
-                <div>
-                  <p class="text-caption text-medium-emphasis mb-1">Active Admins</p>
-                  <h3 class="text-h4 font-weight-bold">{{ stats.activeAdmins }}</h3>
-                </div>
-              </div>
-            </v-card>
+            <StatCard 
+              title="Active Admins"
+              :value="stats.activeAdmins"
+              icon="mdi-account-check"
+              icon-color="success"
+              value-color="text-success"
+            />
           </v-col>
           <v-col cols="12" md="3">
-            <v-card elevation="2" rounded="lg" class="pa-4">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-account-off" size="40" color="error" class="mr-3"></v-icon>
-                <div>
-                  <p class="text-caption text-medium-emphasis mb-1">Blocked Admins</p>
-                  <h3 class="text-h4 font-weight-bold">{{ stats.blockedAdmins }}</h3>
-                </div>
-              </div>
-            </v-card>
+            <StatCard 
+              title="Blocked Admins"
+              :value="stats.blockedAdmins"
+              icon="mdi-account-off"
+              icon-color="error"
+              value-color="text-error"
+            />
           </v-col>
           <v-col cols="12" md="3">
-            <v-card elevation="2" rounded="lg" class="pa-4">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-shield-star" size="40" color="warning" class="mr-3"></v-icon>
-                <div>
-                  <p class="text-caption text-medium-emphasis mb-1">Super Admins</p>
-                  <h3 class="text-h4 font-weight-bold">{{ stats.superAdmins }}</h3>
-                </div>
-              </div>
-            </v-card>
+            <StatCard 
+              title="Super Admins"
+              :value="stats.superAdmins"
+              icon="mdi-shield-star"
+              icon-color="warning"
+              value-color="text-warning"
+            />
           </v-col>
         </v-row>
 
@@ -84,10 +76,14 @@
           ></v-text-field>
 
 
-          <v-data-table
+          <v-data-table-server
             :headers="headers"
-            :items="filteredAdmins"
+            :items="admins"
             :loading="loading"
+            :items-length="totalItems"
+            :items-per-page="itemsPerPage"
+            :items-per-page-options="[10, 25, 50, 100]"
+            @update:options="loadItems"
             class="elevation-1"
             item-value="id"
           >
@@ -172,7 +168,7 @@
                 <v-icon>mdi-delete</v-icon>
               </v-btn>
             </template>
-          </v-data-table>
+          </v-data-table-server>
         </v-card>
       </v-container>
     </div>
@@ -337,12 +333,23 @@
 </template>
 
 <script>
+
 import axios from 'axios'
+
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
 
+import { watchDebounced } from '@vueuse/core'
+import StatCard from '@/components/common/StatCard.vue'
+
+
 export default {
+
   name: 'SuperAdminDashboard',
+
+  components: {
+    StatCard
+  },
 
   setup() {
     const authStore = useAuthStore()
@@ -355,6 +362,9 @@ export default {
       loading: false,
       submitting: false,
       admins: [],
+      totalItems: 0,
+      paginationMeta: null,
+      currentPage: 1,
       stats: {
         totalAdmins: 0,
         activeAdmins: 0,
@@ -379,13 +389,15 @@ export default {
         { label: 'Manage Requests', value: 'manage_requests' }
       ],
       headers: [
-        { title: 'Admin', key: 'name', sortable: true },
+        { title: 'Admin', key: 'name', sortable: false },
         { title: 'Permissions', key: 'permissions', sortable: false },
         { title: 'Status', key: 'is_blocked', sortable: true },
         { title: 'Created', key: 'created_at', sortable: true },
         { title: 'Actions', key: 'actions', sortable: false, width: '200px' }
       ],
       search: '',
+
+      itemsPerPage: 10,
       emailRules: [
         v => !!v || 'Email is required',
         v => /.+@.+\..+/.test(v) || 'Email must be valid'
@@ -409,22 +421,17 @@ export default {
   },
 
   computed: {
-    filteredAdmins() {
-      if (!this.search) return this.admins
-      
-      return this.admins.filter(admin =>
-        admin.name.toLowerCase().includes(this.search.toLowerCase()) ||
-        admin.email.toLowerCase().includes(this.search.toLowerCase())
-      )
-    },
-
     currentAdminId() {
       return this.authStore.admin?.id
     }
   },
 
   async mounted() {
-    await this.fetchAdmins()
+    await this.loadItems()
+
+    await this.fetchStats()
+
+    watchDebounced(() => this.search, () => this.loadItems(), { debounce: 1000 })
     
     this.notificationsStore.initialize()
     this.setupNotificationListener()
@@ -436,12 +443,25 @@ export default {
         () => this.notificationsStore.notifications.length,
         (newLength, oldLength) => {
           if (newLength > oldLength) {
-            // New notification received
             const latestNotification = this.notificationsStore.notifications[0]
             this.showNotificationSnackbar(latestNotification)
           }
         }
       )
+    },
+
+    async fetchStats() {
+      try {
+        const response = await axios.get(`${this.$backend.baseApiUrl}/stats/admins`)
+        this.stats = {
+          totalAdmins: response.data.total_admins,
+          activeAdmins: response.data.active_admins,
+          blockedAdmins: response.data.blocked_admins,
+          superAdmins: response.data.super_admins
+        }
+      } catch (error) {
+        console.error('Error fetching stats:', error)
+      }
     },
 
     showNotificationSnackbar(notification) {
@@ -458,12 +478,55 @@ export default {
         this.currentNotification = null
       }
     },
-    async fetchAdmins() {
+    
+    async loadItems(options = {}) {
       this.loading = true
       try {
-        const response = await axios.get(`${this.$backend.baseApiUrl}/admins`)
-        this.admins = response.data.admins || []
-        this.updateStats()
+        const { page = 1, itemsPerPage = this.itemsPerPage, sortBy = [], search } = options
+        
+        if (itemsPerPage !== this.itemsPerPage) {
+          this.itemsPerPage = itemsPerPage
+        }
+        
+        const perPageValue = itemsPerPage === -1 ? 100 : itemsPerPage
+
+        
+        const params = {
+          page,
+          per_page: perPageValue,
+          search: this.search || search || ''
+        }
+
+        if (sortBy.length > 0) {
+          params.sort_by = sortBy[0].key
+          params.sort_order = sortBy[0].order
+        }
+
+        const response = await axios.get(`${this.$backend.baseApiUrl}/admins`, { params })
+        
+        this.admins = response.data.data || []
+        this.totalItems = response.data.meta?.total || 0
+        this.paginationMeta = response.data.meta || null
+      } catch (error) {
+        console.error('Error loading admins:', error)
+        this.showSnackbar('Error loading admins', 'error')
+      } finally {
+        this.loading = false
+      }
+    },
+
+    async fetchAdmins(page = 1) {
+      this.loading = true
+      try {
+        const response = await axios.get(`${this.$backend.baseApiUrl}/admins`, {
+          params: { page }
+        })
+
+        this.admins = response.data.data || []
+        this.paginationMeta = response.data.meta || null
+
+        this.currentPage = page
+        await this.fetchStats()
       } catch (error) {
         console.error('Error fetching admins:', error)
         this.showSnackbar('Error fetching admins', 'error')
@@ -472,13 +535,8 @@ export default {
       }
     },
 
-    updateStats() {
-      this.stats.totalAdmins = this.admins.length
-      this.stats.activeAdmins = this.admins.filter(a => !a.is_blocked).length
-      this.stats.blockedAdmins = this.admins.filter(a => a.is_blocked).length
-      this.stats.superAdmins = this.admins.filter(a => 
-        a.permissions && a.permissions.includes('super_admin')
-      ).length
+    handlePageChange(page) {
+      this.fetchAdmins(page)
     },
 
     openAddAdminDialog() {
@@ -561,7 +619,7 @@ export default {
 
 
 
-        await this.fetchAdmins()
+        await this.loadItems()
         this.closeAdminDialog()
         this.showSnackbar(response.data.message || `Admin ${this.isEditing ? 'updated' : 'created'} successfully`)
       } catch (error) {
@@ -581,7 +639,7 @@ export default {
     async blockAdmin(admin) {
       try {
         const response = await axios.put(`${this.$backend.baseApiUrl}/admins/${admin.id}/block`)
-        await this.fetchAdmins()
+        await this.loadItems()
         this.showSnackbar(response.data.message || 'Admin blocked successfully')
       } catch (error) {
         console.error('Error blocking admin:', error)
@@ -597,7 +655,7 @@ export default {
     async unblockAdmin(admin) {
       try {
         const response = await axios.put(`${this.$backend.baseApiUrl}/admins/${admin.id}/unblock`)
-        await this.fetchAdmins()
+        await this.loadItems()
         this.showSnackbar(response.data.message || 'Admin unblocked successfully')
       } catch (error) {
         console.error('Error unblocking admin:', error)
@@ -623,7 +681,7 @@ export default {
       this.submitting = true
       try {
         const response = await axios.delete(`${this.$backend.baseApiUrl}/admins/${this.adminToDelete.id}`)
-        await this.fetchAdmins()
+        await this.loadItems()
         this.deleteDialog = false
         this.adminToDelete = null
         this.showSnackbar(response.data.message || 'Admin deleted successfully')

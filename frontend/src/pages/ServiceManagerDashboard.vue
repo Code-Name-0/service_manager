@@ -9,37 +9,31 @@
         
         <v-row class="mb-6">
           <v-col cols="12" md="4">
-            <v-card elevation="2" rounded="lg" class="pa-4">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-cog" size="40" color="primary" class="mr-3"></v-icon>
-                <div>
-                  <p class="text-caption text-medium-emphasis mb-1">Total Services</p>
-                  <h3 class="text-h4 font-weight-bold">{{ stats.totalServices }}</h3>
-                </div>
-              </div>
-            </v-card>
+            <StatCard 
+              title="Total Services"
+              :value="stats.totalServices"
+              icon="mdi-cog"
+              icon-color="primary"
+              value-color="text-primary"
+            />
           </v-col>
           <v-col cols="12" md="4">
-            <v-card elevation="2" rounded="lg" class="pa-4">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-check-circle" size="40" color="success" class="mr-3"></v-icon>
-                <div>
-                  <p class="text-caption text-medium-emphasis mb-1">Active Services</p>
-                  <h3 class="text-h4 font-weight-bold">{{ stats.activeServices }}</h3>
-                </div>
-              </div>
-            </v-card>
+            <StatCard 
+              title="Active Services"
+              :value="stats.activeServices"
+              icon="mdi-check-circle"
+              icon-color="success"
+              value-color="text-success"
+            />
           </v-col>
           <v-col cols="12" md="4">
-            <v-card elevation="2" rounded="lg" class="pa-4">
-              <div class="d-flex align-center">
-                <v-icon icon="mdi-email" size="40" color="info" class="mr-3"></v-icon>
-                <div>
-                  <p class="text-caption text-medium-emphasis mb-1">Total Requests</p>
-                  <h3 class="text-h4 font-weight-bold">{{ stats.totalRequests }}</h3>
-                </div>
-              </div>
-            </v-card>
+            <StatCard 
+              title="Total Requests"
+              :value="stats.totalRequests"
+              icon="mdi-email"
+              icon-color="info"
+              value-color="text-info"
+            />
           </v-col>
         </v-row>
 
@@ -68,10 +62,14 @@
             class="mb-4"
           ></v-text-field>
 
-          <v-data-table
+          <v-data-table-server
             :headers="headers"
-            :items="filteredServices"
+            :items="services"
             :loading="loading"
+            :items-length="totalItems"
+            :items-per-page="itemsPerPage"
+            :items-per-page-options="[10, 25, 50, 100]"
+            @update:options="loadItems"
             class="elevation-1"
             item-value="id"
           >
@@ -122,7 +120,9 @@
                 <v-icon>mdi-delete</v-icon>
               </v-btn>
             </template>
-          </v-data-table>
+          </v-data-table-server>
+          
+
         </v-card>
       </v-container>
     </div>
@@ -262,16 +262,30 @@
 </template>
 
 <script>
+
 import axios from 'axios'
+import StatCard from '@/components/common/StatCard.vue'
+
+import { watchDebounced } from '@vueuse/core'
+
 
 export default {
+
   name: 'ServiceManagerDashboard',
 
+  components: {
+    StatCard
+  },
+
+
   data() {
+
     return {
       loading: false,
       submitting: false,
       services: [],
+      paginationMeta: null,
+      currentPage: 1,
       stats: {
         totalServices: 0,
         activeServices: 0,
@@ -292,42 +306,98 @@ export default {
         description: [v => !!v || 'Description is required']
       },
       headers: [
-        { title: 'Name', key: 'name', sortable: true },
+        { title: 'Name', key: 'name', sortable: false },
         { title: 'Description', key: 'description', sortable: false },
         { title: 'Status', key: 'is_active', sortable: true },
         { title: 'Requests Count', key: 'service_requests_count', sortable: true },
         { title: 'Actions', key: 'actions', sortable: false, width: '160px' }
       ],
+
       search: '',
+
+
+      totalItems: 0,
+
+      itemsPerPage: 10,
       snackbar: {
+
         show: false,
         message: '',
+
         color: 'success'
       }
+
     }
   },
 
-  computed: {
-    filteredServices() {
-      if (!this.search) return this.services
-      return this.services.filter(service =>
-        service.name.toLowerCase().includes(this.search.toLowerCase()) ||
-        service.description.toLowerCase().includes(this.search.toLowerCase())
-      )
-    }
-  },
 
   async mounted() {
-    await this.fetchServices()
+
+    await this.loadItems()
+
+
+    await this.fetchStats()
+    
+
+    watchDebounced(
+
+      () => this.search,
+      () => this.loadItems(),
+      { debounce: 1000 }
+    )
   },
 
   methods: {
-    async fetchServices() {
+    async fetchStats() {
+      try {
+        const response = await axios.get(`${this.$backend.baseApiUrl}/stats/services`)
+        this.stats = {
+          totalServices: response.data.total_services,
+          activeServices: response.data.active_services,
+          totalRequests: response.data.total_requests
+        }
+      } catch (error) {
+        console.error('Error fetching stats:', error)
+      }
+    },
+
+    async loadItems(options = {}) {
       this.loading = true
       try {
-        const response = await axios.get(`${this.$backend.baseApiUrl}/services`)
-        this.services = response.data.services || []
-        this.updateStats()
+        const { page = 1, itemsPerPage = this.itemsPerPage, sortBy = [] } = options
+        
+        if (itemsPerPage !== this.itemsPerPage) {
+
+          this.itemsPerPage = itemsPerPage
+        }
+        
+        const perPageValue = itemsPerPage === -1 ? 100 : itemsPerPage
+
+        
+        const params = {
+          page,
+          per_page: perPageValue
+        }
+        
+
+
+
+        if (this.search) {
+          params.search = this.search
+        }
+        
+        if (sortBy.length > 0) {
+
+          params.sort_by = sortBy[0].key
+          params.sort_order = sortBy[0].order
+        }
+
+        const response = await axios.get(`${this.$backend.baseApiUrl}/services`, { params })
+        
+        this.services = response.data.data || []
+        this.totalItems = response.data.meta?.total || 0
+
+        this.paginationMeta = response.data.meta || null
       } catch (error) {
         console.error('Error fetching services:', error)
         this.showSnackbar('Error fetching services', 'error')
@@ -336,10 +406,13 @@ export default {
       }
     },
 
-    updateStats() {
-      this.stats.totalServices = this.services.length
-      this.stats.activeServices = this.services.filter(s => s.is_active).length
-      this.stats.totalRequests = this.services.reduce((sum, service) => sum + (service.service_requests_count || 0), 0)
+    async fetchServices(page = 1) {
+      await this.loadItems({ page })
+
+    },
+
+    handlePageChange(page) {
+      this.loadItems({ page })
     },
 
     openAddDialog() {
@@ -371,36 +444,38 @@ export default {
       if (!this.$refs.serviceForm.validate()) return
 
       this.submitting = true
+
       try {
         let response
 
         if (this.editingService) {
           response = await axios.put(
+
             `${this.$backend.baseApiUrl}/services/${this.editingService.id}`,
             this.serviceForm
           )
 
-
           const index = this.services.findIndex(s => s.id === this.editingService.id)
           if (index !== -1) {
-            this.services[index] = response.data.service
+            this.services[index] = response.data.data || response.data.service
           }
-
 
           this.showSnackbar('Service updated successfully')
         } else {
 
           response = await axios.post(`${this.$backend.baseApiUrl}/services`, this.serviceForm)
-          this.services.push(response.data.service)
+          this.services.push(response.data.data || response.data.service)
+
           this.showSnackbar('Service created successfully')
         }
-        
 
-        this.updateStats()
+        await this.fetchStats()
         this.closeDialog()
+
       } catch (error) {
         console.error('Error saving service:', error)
         this.showSnackbar(
+
           error.response?.data?.message || 'Error saving service',
           'error'
 
@@ -433,7 +508,7 @@ export default {
           this.services.splice(index, 1)
         }
         
-        this.updateStats()
+        await this.fetchStats()
         this.showSnackbar('Service deleted successfully')
         this.deleteDialog = false
         this.serviceToDelete = null
@@ -459,12 +534,14 @@ export default {
         const response = await axios.put(`${this.$backend.baseApiUrl}/services/${service.id}/toggle-status`)
         
 
+
+
         const index = this.services.findIndex(s => s.id === service.id)
         if (index !== -1) {
-          this.services[index].is_active = response.data.service.is_active
+          this.services[index].is_active = (response.data.data || response.data.service).is_active
         }
         
-        this.updateStats()
+        await this.fetchStats()
         this.showSnackbar(response.data.message)
       } catch (error) {
         console.error('Error toggling service status:', error)

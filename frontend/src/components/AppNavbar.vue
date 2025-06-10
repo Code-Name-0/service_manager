@@ -18,50 +18,13 @@
           />
         </div>
 
-        <!-- Navigation -->
         <div class="d-flex align-center">
-          <!-- ! ybano ghir ila kan l admin logged in -->
-          <div v-if="authStore.isLoggedIn" class="d-flex align-center mr-5">
-            <v-btn
-              v-if="authStore.hasPermission('super_admin')"
-              variant="text" 
-              size="small"
-              :color="this.$route.query.view === 'super_admin' ? 'info' : 'default'"
-              @click="navigateToView('super_admin')"
-              class="mr-2"
-            >
-              <v-icon size="small" class="mr-1">mdi-shield-crown</v-icon>
-              <span class="d-none d-md-inline">Admin Managemet</span>
-            </v-btn>
-            
-            <v-btn
-              v-if="authStore.hasPermission('manage_services')"
-              variant=  "text"
-              size="small"
-              @click="navigateToView('service_manager')"
-              class="mr-2"
-              :color="this.$route.query.view === 'service_manager' ? 'info' : 'default'"
-            >
-              <v-icon size="small" class="mr-1">mdi-cog</v-icon>
-              <span class="d-none d-md-inline">Service Management</span>
-            </v-btn>
-            
 
 
-            <v-btn
-              v-if="authStore.hasPermission('manage_requests')"
-              variant="text"
-              size="small"
-              @click="navigateToView('request_manager')"
-              class="mr-2"
-              :color="this.$route.query.view === 'request_manager' ? 'info' : 'default'"
-            >
-              <v-icon size="small" class="mr-1">mdi-email</v-icon>
-              <span class="d-none d-md-inline">Request Management</span>
-            </v-btn>
-          </div>
-
-
+          <NavLinks 
+            :current-view="this.$route.query.view"
+            @navigate="navigateToView"
+          />
 
           <div v-if="authStore.isLoggedIn && canReceiveNotifications" class="mr-3">
             <v-menu
@@ -297,9 +260,14 @@
 <script>
 import { useAuthStore } from '@/stores/auth'
 import { useNotificationsStore } from '@/stores/notifications'
+import NavLinks from '@/components/navbar/NavLinks.vue'
 
 export default {
   name: 'AppNavbar',
+  
+  components: {
+    NavLinks
+  },
   
   setup() {
     

@@ -6,11 +6,32 @@ import {createPinia} from 'pinia'
 import router from './router'
 import App from './App.vue'
 import 'vuetify/styles'
+import axios from 'axios'
 
 import '@mdi/font/css/materialdesignicons.css'
 
-// Laravel Echo for real-time broadcasting
+
+axios.interceptors.request.use(
+
+  (config) => {
+    const token = localStorage.getItem('admin_token')
+
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+
+    }
+    return config
+  },
+
+  (error) => {
+    return Promise.reject(error)
+  }
+
+)
+
+
 import Echo from 'laravel-echo'
+
 import Pusher from 'pusher-js'
 
 window.Pusher = Pusher

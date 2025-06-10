@@ -1,7 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import HomePage from '@/components/HomePage.vue'
-import Dashboard from '@/components/Dashboard.vue'
+import HomePage from '@/pages/HomePage.vue'
+import Dashboard from '@/pages/Dashboard.vue'
 
 const routes = [
   {

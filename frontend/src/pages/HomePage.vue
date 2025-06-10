@@ -4,6 +4,16 @@
     <div class="main-content px-4 pb-4 min-h-screen" >
       <h1 class="mb-6">Home Page</h1>
 
+      <div class="d-flex align-center mb-4">
+        <v-switch
+          v-model="showOnlyActive"
+          label="Show only active services"
+          color="primary"
+          hide-details
+          @change="onToggleChange"
+        ></v-switch>
+      </div>
+
     <div v-if="loading"> 
       <v-card loading text="...">
         <v-card-title>
@@ -83,6 +93,16 @@
 
     <div v-if="!loading && !error && services.length === 0">
       No services found.
+    </div>
+    
+    <div v-if="paginationMeta && paginationMeta.total > paginationMeta.per_page" class="d-flex justify-center mt-6">
+      <v-pagination
+        v-model="currentPage"
+        :length="paginationMeta.last_page"
+        :total-visible="7"
+        :disabled="loading"
+        @update:model-value="handlePageChange"
+      ></v-pagination>
     </div>
     </div>
 
@@ -257,7 +277,7 @@
 
 <script>
 import axios from 'axios'
-import AppNavbar from './AppNavbar.vue'
+import AppNavbar from '@/components/AppNavbar.vue'
 
 export default {
   name: 'HomePage',
@@ -273,8 +293,11 @@ export default {
   data() {
     return {
       services: [],
+      paginationMeta: null,
+      currentPage: 1,
       loading: false,
       error: null,
+      showOnlyActive: false, // show all services, user can change it
       serviceModal: false,
       selectedService: null,
       requestModal: false,
@@ -306,6 +329,9 @@ export default {
     filterActiveServices(services, onlyActive = true) {
       if (!onlyActive) return services
       return services.filter(service => service.is_active)
+    },
+    onToggleChange() {
+      this.fetchServices(1)
     },
     toggleServiceModal(service) {
       this.selectedService = service
@@ -365,7 +391,6 @@ export default {
         console.error('Error submitting service request:', error)
         
         if (error.response?.data?.errors) {
-          // Handle validation errors
           const errors = error.response.data.errors
           const errorMessages = Object.values(errors).flat()
           this.requestError = errorMessages.join(', ')
@@ -376,7 +401,7 @@ export default {
         this.submittingRequest = false
       }
     },
-    async fetchServices() {
+    async fetchServices(page = 1) {
       this.loading = true
       this.error = null
       
@@ -384,15 +409,23 @@ export default {
         const url = `${this.$backend.basePublicUrl}/services`
         console.log('Fetching services from:', url)
         
-        const response = await axios.get(url)
+        const response = await axios.get(url, {
+          params: { page }
+        })
         console.log(response.data)
-        this.services = response.data.services
+        this.services = this.filterActiveServices(response.data.data, this.showOnlyActive) || []
+        this.paginationMeta = response.data.meta || null
+        this.currentPage = page
       } catch (error) {
         this.error = error.response?.data?.message || error.message
         console.error('Error fetching services:', error)
       } finally {
         this.loading = false
       }
+    },
+    
+    handlePageChange(page) {
+      this.fetchServices(page)
     }
   }
 }

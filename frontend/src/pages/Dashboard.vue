@@ -24,10 +24,10 @@
 </template>
 
 <script>
-import AppNavbar from './AppNavbar.vue'
-import ServiceManagerDashboard from './dashboards/ServiceManagerDashboard.vue'
-import RequestManagerDashboard from './dashboards/RequestManagerDashboard.vue'
-import SuperAdminDashboard from './dashboards/SuperAdminDashboard.vue'
+import AppNavbar from '@/components/AppNavbar.vue'
+import ServiceManagerDashboard from '@/pages/ServiceManagerDashboard.vue'
+import RequestManagerDashboard from '@/pages/RequestManagerDashboard.vue'
+import SuperAdminDashboard from '@/pages/SuperAdminDashboard.vue'
 import { useAuthStore } from '@/stores/auth'
 
 export default {
@@ -57,7 +57,6 @@ export default {
     },
 
     currentView() {
-      // Get the view from query parameter
       const queryView = this.$route.query.view
       console.log('Dashboard currentView computed - Query view:', queryView)
       console.log('Dashboard currentView computed - User permissions:', this.authStore.adminPermissions)
